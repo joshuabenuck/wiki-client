@@ -18,6 +18,10 @@ random = require './random'
 #   after: id -- new item to be added after id
 #   sufix: text -- editor opens with unsaved suffix appended
 #   field: 'text' -- editor operates on this field of the item
+#   joinable: boolean -- backspace will join editors of same type
+#   appendType: type -- append editor of specified type on save
+#   singleLine: boolean -- only accept a singe line of input
+#   multiLine: boolean -- accept multiple lines, stop after two blank
 
 escape = (string) ->
   string
@@ -25,9 +29,28 @@ escape = (string) ->
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
 
+applyDefaultsForType = (type, provided) ->
+  merged = provided
+  if type == 'paragraph'
+    merged = {
+      singleLine: true,
+      joinable: true
+      appendType: type
+    }
+    Object.assign(merged, provided)
+  if type == 'markdown'
+    merged = {
+      multiLine: true,
+      joinable: true,
+      appendType: type
+    }
+    Object.assign(merged, provided)
+  return merged
+
 textEditor = ($item, item, option={}) ->
+  option = applyDefaultsForType(item.type, option)
   console.log 'textEditor', item.id, option
-  enterCount = 0 if item.type is 'markdown'
+  enterCount = 0 if option.multiLine
   return unless $('.editEnable').is(':visible')
 
   keydownHandler = (e) ->
@@ -50,7 +73,7 @@ textEditor = ($item, item, option={}) ->
       return false
 
     # provides automatic new paragraphs on enter and concatenation on backspace
-    if item.type is 'paragraph' or item.type is 'markdown'
+    if option.joinable
       sel = getSelectionPos($textarea) # position of caret or selected text coords
 
       if e.which is $.ui.keyCode.BACKSPACE and sel.start is 0 and sel.start is sel.end
@@ -63,13 +86,16 @@ textEditor = ($item, item, option={}) ->
         textEditor $previous, previous, {caret, suffix}
         return false
 
+    if option.singleLine or option.multiLine
+      sel = getSelectionPos($textarea) # position of caret or selected text coords
+
       if e.which is $.ui.keyCode.ENTER
         # console.log "Type: #{item.type}, enterCount: #{enterCount}"
         return false unless sel
-        if item.type is 'markdown'
+        if option.multiLine
           enterCount++
         # console.log "Type: #{item.type}, enterCount: #{enterCount}"
-        if item.type is 'paragraph' or (item.type is 'markdown' and enterCount is 2)
+        if option.singleLine or (option.multiLine and enterCount is 2)
           $page = $item.parents('.page')
           text = $textarea.val()
           prefix = text.substring 0, sel.start
@@ -77,14 +103,14 @@ textEditor = ($item, item, option={}) ->
           if prefix is ''
             $textarea.val(suffix)
             $textarea.focusout()
-            spawnEditor($page, $item.prev(), item.type, prefix)
+            spawnEditor($page, $item.prev(), option.appendType, prefix)
           else
             $textarea.val(prefix)
             $textarea.focusout()
-            spawnEditor($page, $item, item.type, suffix)
+            spawnEditor($page, $item, option.appendType, suffix)
           return false
       else
-        enterCount = 0 if item.type is 'markdown'
+        enterCount = 0 if option.multiLine
 
   focusoutHandler = ->
     $item.removeClass 'textEditing'
@@ -121,7 +147,7 @@ textEditor = ($item, item, option={}) ->
   else
     $textarea.focus()
 
-spawnEditor = ($page, $before, type, text) ->
+spawnEditor = ($page, $before, type, text, option={}) ->
   item =
     type: type
     id: random.itemId()
@@ -133,7 +159,9 @@ spawnEditor = ($page, $before, type, text) ->
   $before.after $item
   plugin.do $item, item
   before = itemz.getItem $before
-  textEditor $item, item, {after: before?.id}
+  # use previous options with one addition
+  Object.assign(option, {after: before?.id})
+  textEditor $item, item, option
 
 
 # If the selection start and selection end are both the same,
