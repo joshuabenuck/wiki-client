@@ -103,6 +103,9 @@ img.remote,
 header {
   top: 0; }
 
+.header > h1 {
+  cursor: grab; }
+
 footer {
   bottom: 0; }
 
