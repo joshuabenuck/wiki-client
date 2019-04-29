@@ -191,7 +191,7 @@ emitHeader = ($header, $page, pageObject) ->
     <h1 title="#{tooltip}">
       <a href="#{pageObject.siteLineup()}" target="#{remote}">
         <img src="#{wiki.site(remote).flag()}" height="32px" class="favicon"></a>
-      #{resolve.escape pageObject.getTitle()}
+      <span>#{resolve.escape pageObject.getTitle()}</span>
     </h1>
   """
   $header.find('a').on 'click', handleHeaderClick
