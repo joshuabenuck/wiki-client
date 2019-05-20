@@ -34,8 +34,11 @@ getItem = ($item) ->
   $($item).data("item") or $($item).data('staticItem') if $($item).length > 0
 
 aliasItem = ($page, $item, oldItem) ->
+  console.log 'alias', $page, $item, oldItem
   item = $.extend {}, oldItem
   pageObject = lineup.atKey($page.data('key'))
+  window.lineup = lineup
+  console.log 'page obj', pageObject
   if pageObject.getItem(item.id)?
     item.alias ||= item.id
     item.id = random.itemId()
@@ -49,98 +52,111 @@ aliasItem = ($page, $item, oldItem) ->
       $item.attr 'data-id', item.id
   item
 
-equals = (a, b) -> a and b and a.get(0) == b.get(0)
+class DragOp
+  start: (_, ui) =>
+    @origCursor = $('body').css('cursor')
+    $item = ui.item
+    $placeholder = ui.placeholder
 
-handleDrop = (evt, ui) ->
-  $item = ui.item
+    # Create a copy that we control since sortable removes theirs too early.
+    # Insert after the placeholder to prevent adding history when item not moved.
+    # Clear out the styling they add. Updates to jquery ui can affect this.
+    $item.clone().insertAfter($placeholder).hide().addClass("shadow-copy")
+      .css({width: '', height: '', position: '', zIndex: ''})
+      .removeAttr('data-id')
 
-  item = getItem($item)
-  $thisPage = $(this).parents('.page:first')
-  $sourcePage = $item.data('pageElement')
-  sourceIsGhost = $sourcePage.hasClass('ghost')
-  sourceSite = $sourcePage.data('site')
+  _equals: (a, b) => a and b and a.get(0) == b.get(0)
 
-  $destinationPage = $item.parents('.page:first')
-  destinationIsGhost = $destinationPage.hasClass('ghost')
-
-  moveWithinPage = equals($sourcePage, $destinationPage)
-  moveFromPage = not moveWithinPage and equals($thisPage, $sourcePage)
-  moveToPage = not moveWithinPage and equals($thisPage, $destinationPage)
-  moveBetweenDuplicatePages = moveFromPage and \
-    $sourcePage.attr('id') == $destinationPage.attr('id')
-
-  if destinationIsGhost or moveBetweenDuplicatePages
-    $(evt.target).sortable('cancel')
+  over: (_, ui) =>
+    # Called when our destination page changes
     return
 
-  if moveFromPage and $item.hasClass('copy')
-    # Don't record a remove if we are copying
+  changeMouseCursor: (evt, ui) =>
+    # These should ideally be split across start and over, but jquery ui
+    # clears them out unexpectedly.
+    @$item = ui.item
+    @$sourcePage = @$item.data('pageElement')
+    @sourceIsGhost = @$sourcePage.hasClass('ghost')
+    $placeholder = ui.placeholder
+    @$destinationPage = $placeholder.parents('.page:first')
+    @destinationIsGhost = @$destinationPage.hasClass('ghost')
+    #console.log 'over', @$sourcePage, @$destinationPage
+    @moveWithinPage = @_equals(@$sourcePage, @$destinationPage)
+    @moveBetweenDuplicatePages = not @moveWithinPage and \
+      @$sourcePage.attr('id') == @$destinationPage.attr('id')
+
+    # Called on every mouse move during a drag
+    @copying = false
+    if @destinationIsGhost or @moveBetweenDuplicatePages
+      $('body').css('cursor', 'no-drop')
+      $('.shadow-copy').hide()
+    else if @sourceIsGhost or (evt.shiftKey and not @moveWithinPage)
+      @copying = true
+      $('body').css('cursor', 'copy')
+      $('.shadow-copy').show()
+    else
+      $('body').css('cursor', 'move')
+      $('.shadow-copy').hide()
     return
 
-  action = if moveWithinPage
-    order = $(this).children().map((_, value) -> $(value).attr('data-id')).get()
-    {type: 'move', order: order}
-  else if moveFromPage
-    console.log 'drag from', $sourcePage.find('h1').text()
-    {type: 'remove'}
-  else if moveToPage
-    # If making a copy, update the temp clone so it becomes a true copy.
-    if $item.hasClass('copy')
+  stop: (evt, ui) =>
+    # Called at the end of a drag operation
+    if @destinationIsGhost or @moveBetweenDuplicatePages
+      $(evt.target).sortable('cancel')
+      return
+
+    @item = getItem(@$item)
+    if @moveWithinPage
+      console.log 'move within page'
+      order = @$destinationPage.find('.story').children()
+        .map((_, value) -> $(value).attr('data-id')).get()
+      pageHandler.put @$destinationPage, {id: @item.id, type: 'move', order: order}
+      return
+
+    if @copying
+      console.log 'copying'
+      # If making a copy, update the temp clone on the source page so it 
+      # we don't lose the version there.
       $('.shadow-copy').removeClass('shadow-copy')
-        .data($item.data()).attr({'data-id': $item.attr('data-id')})
-    $item.data 'pageElement', $thisPage
-    $before = $item.prev('.item')
-    before = getItem($before)
-    item = aliasItem $thisPage, $item, item
-    {type: 'add', item, after: before?.id}
-  action.id = item.id
-  pageHandler.put $thisPage, action
+        .data(@$item.data()).attr({'data-id': @$item.attr('data-id')})
+    else
+      console.log 'moving'
+      # Record removal from source page.
+      console.log 'drag from', @$sourcePage.find('h1').text()
+      pageHandler.put @$sourcePage, {id: @item.id, type: 'remove'}
 
-changeMouseCursor = (e, ui) ->
-  $sourcePage = ui.item.data('pageElement')
-  sourceIsGhost = $sourcePage.hasClass('ghost')
-  $destinationPage = ui.placeholder.parents('.page:first')
-  destinationIsGhost = $destinationPage.hasClass('ghost')
-  moveAcrossPages = not equals($sourcePage, $destinationPage)
-  if destinationIsGhost or \
-      (moveAcrossPages and $sourcePage.attr('id') == $destinationPage.attr('id'))
-    $('body').css('cursor', 'no-drop')
-    $('.shadow-copy').hide()
-    ui.item.removeClass('copy')
-  else if sourceIsGhost or (e.shiftKey and moveAcrossPages)
-    $('body').css('cursor', 'copy')
-    $('.shadow-copy').show()
-    ui.item.addClass('copy')
-  else
-    $('body').css('cursor', 'move')
-    $('.shadow-copy').hide()
-    ui.item.removeClass('copy')
+
+    console.log 'journal update'
+    # Either way, record addition to destinatin page.
+    @$item.data 'pageElement', @$destinationPage
+    $before = @$item.prev('.item')
+    before = getItem($before)
+    @item = aliasItem @$destinationPage, @$item, @item
+    pageHandler.put @$destinationPage,
+                    {id: @item.id, type: 'add', @item, after: before?.id}
+    return
+
+  cleanup: (evt, ui) =>
+    # Called at the end of a drag operation
+    console.log 'cleanup'
+    $('body').css('cursor', @origCursor)
+    $('.shadow-copy').remove()
+    return
 
 initDragging = ($page) ->
-  origCursor = $('body').css('cursor')
   options =
     connectWith: '.page .story'
     placeholder: 'item-placeholder'
     forcePlaceholderSize: true
+  dragOp = new DragOp()
   $story = $page.find('.story')
   $story.sortable(options)
-    .on 'sortupdate', handleDrop
-    .on 'sort', changeMouseCursor
-    .on 'sortstart', (e, ui) ->
-      # Create a copy that we control since sortable removes theirs too early.
-      # Insert after the placeholder to prevent adding history when item not moved.
-      # Clear out the styling they add. Updates to jquery ui can affect this.
-      ui.item.clone().insertAfter(ui.placeholder).hide().addClass("shadow-copy")
-        .css(
-          width: ''
-          height: ''
-          position: ''
-          zIndex: ''
-        ).removeAttr('data-id')
-    .on 'sortstop', (e, ui) ->
-      $('body').css('cursor', origCursor)
-      $('.shadow-copy').remove()
-      $('.copy').removeClass('copy')
+    .on 'sortstart', dragOp.start
+    .on 'sortover', dragOp.over
+    .on 'sort', dragOp.changeMouseCursor
+    #.on 'sortupdate', (args...) -> dragOp.drop(args...)
+    .on 'sortstop', dragOp.stop
+    .on 'sortstop', dragOp.cleanup
 
 getPageObject = ($journal) ->
   $page = $($journal).parents('.page:first')
