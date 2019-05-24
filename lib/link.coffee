@@ -24,15 +24,38 @@ createPage = (name, loc) ->
   $page.data('site', site) if site
   $page
 
-showPage = (name, loc) ->
-  createPage(name, loc).appendTo('.main').each refresh.cycle
+showPage = (name, loc, $after) ->
+  $page = createPage(name, loc)
+  $page.appendTo('.main') if not $after
+  $page.after if $after
+  $page.each refresh.cycle
+  return $page
+
+openInternalLink = (name, $page, site=null, target) ->
+  name = asSlug(name)
+  $page = $($page)
+  key = $page.data('key')
+  if target == 'lineup'
+    $page.nextAll().remove()
+    lineup.removeAllAfterKey key
+   `showPage(name, site, $page)
+    return active.set($('.page').last())
+  if target == 'end'
+   `showPage(name, site, $page)
+    return active.set($('.page').last())
+  if target in ['current', 'next']
+    lineup.addAfterKey key, $page
+   `$newPage = showPage(name, site, $page)
+    if target == 'replace'
+      $page.remove()
+      lineup.removeKey $page.data('key')
+    return active.set $newPage
+  console.log('openInternalLink: unknown target', target)
 
 doInternalLink = (name, $page, site=null) ->
-  name = asSlug(name)
-  $($page).nextAll().remove() if $page?
-  lineup.removeAllAfterKey $($page).data('key') if $page?
-  showPage(name,site)
-  active.set($('.page').last())
+  target = 'end'
+  target = 'remove' if $page
+  openInternalLink(name, $page, site, target)
 
 showResult = (pageObject, options={}) ->
   $(options.$page).nextAll().remove() if options.$page?
@@ -48,4 +71,5 @@ pageEmitter.on 'show', (page) ->
   console.log 'pageEmitter handling', page
   showResult page
 
-module.exports = {createPage, doInternalLink, showPage, showResult}
+module.exports = {createPage, doInternalLink, openInternalLink,
+                  showPage, showResult}

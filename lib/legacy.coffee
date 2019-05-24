@@ -99,8 +99,13 @@ $ ->
 
   finishClick = (e, name) ->
     e.preventDefault()
-    page = $(e.target).parents('.page') unless e.shiftKey
-    link.doInternalLink name, page, $(e.target).data('site')
+    target = switch
+      when e.ctrlKey then 'next'
+      when e.altKey then 'current'
+      when e.shiftKey then 'end'
+      else 'lineup'
+    $after = $(e.target).parents('page')
+    link.openInternalLink name, $after, $(e.target).data('site'), target
     return false
 
   $('.main')
