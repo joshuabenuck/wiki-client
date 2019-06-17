@@ -36,12 +36,47 @@ getScript = plugin.getScript = (url, callback = () ->) ->
       .fail ->
         callback()
 
+pluginsThatConsume = (capability) ->
+  Object.keys(window.plugins).filter(plugin -> window.plugins[plugin].consumes)
+
+bind = (pluginBind) ->
+  fn($item, item) ->
+    consumes = window.plugins[name].consumes
+    producers = pluginsThatProduce(consumes)
+    waitFor = Promise.resolve()
+    # Wait for all items on the page that produce what we consume
+    # before calling our bind method.
+    if consumes
+      if not producers
+        console.log 'warn: no plugin register that produces', consumes
+      deps = $page.find(consumes).map (_i, el) -> el.promise
+      waitFor = Promise.all(deps)
+    waitFor
+      .then pluginBind($item, item)
+      # After we bind, notify everyone that depends on us to reload
+      .then ->
+        return if not plugin.produces
+        console.log 'notifying plugins that consume', plugin.produces
+        tonotify = pluginsThatConsume(plugin.produces)
+        tonotify.forEach (plugin) ->
+          lineup.find('plugin of type plugin.name').forEach (pluginItem) ->
+            plugin.do $item.empty(), pluginItem
+      .catch (e) ->
+        console.log 'plugin emit: unexpected error', e
+
 plugin.get = plugin.getPlugin = (name, callback) ->
-  return callback(window.plugins[name]) if window.plugins[name]
-  getScript "/plugins/#{name}/#{name}.js", () ->
-    return callback(window.plugins[name]) if window.plugins[name]
-    getScript "/plugins/#{name}.js", () ->
-      callback(window.plugins[name])
+  return new Promise (resolve) ->
+    resolve(window.plugins[name]) if window.plugins[name]
+    getScript "/plugins/#{name}/#{name}.js", () ->
+      return resolve(window.plugins[name]) if window.plugins[name]
+      getScript "/plugins/#{name}.js", () ->
+        resolve(window.plugins[name])
+  .then (plugin) ->
+    if not plugin.wrapped
+      console.log 'wrapping plugin', name
+      plugin.bind = bind(plugin.bind)
+      plugin.wrapped = true
+    callback plugin if callback
 
 plugin.do = plugin.doPlugin = (div, item, done=->) ->
   error = (ex, script) ->
