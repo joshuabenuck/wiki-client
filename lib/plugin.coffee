@@ -36,8 +36,17 @@ getScript = plugin.getScript = (url, callback = () ->) ->
       .fail ->
         callback()
 
+# Consumes is a map
 pluginsThatConsume = (capability) ->
-  Object.keys(window.plugins).filter(plugin -> window.plugins[plugin].consumes)
+  Object.keys(window.plugins)
+    .filter(plugin -> window.plugins[plugin].consumes)
+    .filter(plugin -> capability in Object.keys(window.plugins[plugin].consumes))
+
+# Produces is an array
+pluginsThatProduce = (capability) ->
+  Object.keys(window.plugins)
+    .filter(plugin -> window.plugins[plugin].produces)
+    .filter(plugin -> capability in window.plugins[plugin].produces)
 
 bind = (pluginBind) ->
   fn($item, item) ->
