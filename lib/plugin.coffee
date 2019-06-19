@@ -25,6 +25,7 @@ cachedScript = (url, options) ->
 
 scripts = []
 getScript = plugin.getScript = (url, callback = () ->) ->
+  console.log(url)
   # console.log "URL :", url, "\nCallback :", callback
   if url in scripts
     callback()
@@ -48,14 +49,15 @@ pluginsThatProduce = (capability) ->
     .filter(plugin -> window.plugins[plugin].produces)
     .filter(plugin -> capability in window.plugins[plugin].produces)
 
-bind = (pluginBind) ->
-  fn($item, item) ->
+bind = (name, pluginBind) ->
+  fn = ($item, item) ->
     consumes = window.plugins[name].consumes
-    producers = pluginsThatProduce(consumes)
     waitFor = Promise.resolve()
     # Wait for all items on the page that produce what we consume
     # before calling our bind method.
     if consumes
+      # TODO: Support consuming more than one capability
+      producers = pluginsThatProduce(Object.keys(consumes)[0])
       if not producers
         console.log 'warn: no plugin register that produces', consumes
       deps = $page.find(consumes).map (_i, el) -> el.promise
@@ -72,20 +74,21 @@ bind = (pluginBind) ->
             plugin.do $item.empty(), pluginItem
       .catch (e) ->
         console.log 'plugin emit: unexpected error', e
+  return fn
 
 plugin.get = plugin.getPlugin = (name, callback) ->
-  return new Promise (resolve) ->
-    resolve(window.plugins[name]) if window.plugins[name]
-    getScript "/plugins/#{name}/#{name}.js", () ->
-      return resolve(window.plugins[name]) if window.plugins[name]
-      getScript "/plugins/#{name}.js", () ->
-        resolve(window.plugins[name])
-  .then (plugin) ->
-    if not plugin.wrapped
-      console.log 'wrapping plugin', name
-      plugin.bind = bind(plugin.bind)
-      plugin.wrapped = true
-    callback plugin if callback
+  return callback(window.plugins[name]) if window.plugins[name]
+  getScript "/plugins/#{name}/#{name}.js", () ->
+    # Grr... where is let when you need it!
+    p = window.plugins[name]
+    if p
+      p.bind = bind(name, p.bind)
+      return callback(p)
+    getScript "/plugins/#{name}.js", () ->
+      p = window.plugins[name]
+      p.bind = bind(name, p.bind) if p
+      callback(p)
+
 
 plugin.do = plugin.doPlugin = (div, item, done=->) ->
   error = (ex, script) ->
