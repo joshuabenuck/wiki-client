@@ -34,7 +34,8 @@ getScript = plugin.getScript = (url, callback = () ->) ->
       .done ->
         scripts.push url
         callback()
-      .fail ->
+      .fail (_jqXHR, _textStatus, err) ->
+        console.log('Failed to load plugin:', url, err)
         callback()
 
 # Consumes is a map
@@ -82,11 +83,11 @@ plugin.get = plugin.getPlugin = (name, callback) ->
     # Grr... where is let when you need it!
     p = window.plugins[name]
     if p
-      p.bind = bind(name, p.bind)
+      #p.bind = bind(name, p.bind)
       return callback(p)
     getScript "/plugins/#{name}.js", () ->
       p = window.plugins[name]
-      p.bind = bind(name, p.bind) if p
+      #p.bind = bind(name, p.bind) if p
       callback(p)
 
 
