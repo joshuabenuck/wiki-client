@@ -13,6 +13,7 @@ dialog = require './dialog'
 link = require './link'
 target = require './target'
 license = require './license'
+plugin = require './plugin'
 
 asSlug = require('./page').asSlug
 newPage = require('./page').newPage
@@ -133,6 +134,11 @@ $ ->
           active.set $('.active')
         state.setUrl()
         state.debugStates()
+        console.log("refreshing all plugins in the lineup.")
+        $(".item").get().map (i) ->
+          $item = $(i)
+          item = $item.data("item")
+          plugin.do $item.empty(), item
 
     .delegate '.show-page-license', 'click', (e) ->
       e.preventDefault()
