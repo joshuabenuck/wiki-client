@@ -41,14 +41,14 @@ getScript = plugin.getScript = (url, callback = () ->) ->
 # Consumes is a map
 pluginsThatConsume = (capability) ->
   Object.keys(window.plugins)
-    .filter(plugin -> window.plugins[plugin].consumes)
-    .filter(plugin -> capability in Object.keys(window.plugins[plugin].consumes))
+    .filter (plugin) -> window.plugins[plugin].consumes
+    .filter (plugin) -> Object.keys(window.plugins[plugin].consumes).indexOf(capability) != -1
 
 # Produces is an array
 pluginsThatProduce = (capability) ->
   Object.keys(window.plugins)
-    .filter(plugin -> window.plugins[plugin].produces)
-    .filter(plugin -> capability in window.plugins[plugin].produces)
+    .filter (plugin) -> window.plugins[plugin].produces
+    .filter (plugin) -> window.plugins[plugin].produces.indexOf(capability) != -1
 
 bind = (name, pluginBind) ->
   fn = ($item, item) ->
@@ -57,22 +57,32 @@ bind = (name, pluginBind) ->
     # Wait for all items on the page that produce what we consume
     # before calling our bind method.
     if consumes
+      consumes = Object.keys(consumes)[0]
       # TODO: Support consuming more than one capability
-      producers = pluginsThatProduce(Object.keys(consumes)[0])
+      producers = pluginsThatProduce(consumes)
+      console.log(name, "consumes", consumes)
+      console.log(producers, "produce that something")
       if not producers
-        console.log 'warn: no plugin register that produces', consumes
+        console.log 'warn: no plugin registered that produces', consumes
+      console.log("there are", $page.find(consumes).length, "instances of that something")
       deps = $page.find(consumes).map (_i, el) -> el.promise
       waitFor = Promise.all(deps)
     waitFor
       .then pluginBind($item, item)
       # After we bind, notify everyone that depends on us to reload
       .then ->
-        return if not plugin.produces
-        console.log 'notifying plugins that consume', plugin.produces
-        tonotify = pluginsThatConsume(plugin.produces)
-        tonotify.forEach (plugin) ->
-          lineup.find('plugin of type plugin.name').forEach (pluginItem) ->
-            plugin.do $item.empty(), pluginItem
+        p = window.plugins[name]
+        return if not p.produces
+        console.log 'notifying plugins that consume', p.produces
+        tonotify = pluginsThatConsume(p.produces[0])
+        console.log(p.produces[0], "we need to notify", tonotify, "of changes")
+        tonotify.forEach (name) ->
+          console.log(name, $(".tail"))
+          $("." + name).each (_i, consumer) ->
+            $consumer = $(consumer)
+            console.log(consumer, $consumer)
+            plugin.do $consumer.empty(), $consumer.data("item")
+            console.log($consumer[0])
       .catch (e) ->
         console.log 'plugin emit: unexpected error', e
   return fn
@@ -83,11 +93,11 @@ plugin.get = plugin.getPlugin = (name, callback) ->
     # Grr... where is let when you need it!
     p = window.plugins[name]
     if p
-      #p.bind = bind(name, p.bind)
+      p.bind = bind(name, p.bind)
       return callback(p)
     getScript "/plugins/#{name}.js", () ->
       p = window.plugins[name]
-      #p.bind = bind(name, p.bind) if p
+      p.bind = bind(name, p.bind) if p
       callback(p)
 
 
