@@ -12,10 +12,10 @@ escape = (s) ->
     .replace(/'/g, '&#x27;')
     .replace(/\//g,'&#x2F;')
 
-# define cachedScript that allows fetching a cached script.
+# define loadScript that allows fetching a script.
 # see example in http://api.jquery.com/jQuery.getScript/
 
-cachedScript = (url, options) ->
+loadScript = (url, options) ->
   options = $.extend(options or {},
     dataType: "script"
     cache: true
@@ -24,13 +24,14 @@ cachedScript = (url, options) ->
   $.ajax options
 
 scripts = []
+loadingScripts = {}
 getScript = plugin.getScript = (url, callback = () ->) ->
   console.log(url)
   # console.log "URL :", url, "\nCallback :", callback
   if url in scripts
     callback()
   else
-    cachedScript url
+    loadScript url
       .done ->
         scripts.push url
         callback()
@@ -88,17 +89,23 @@ bind = (name, pluginBind) ->
   return fn
 
 plugin.get = plugin.getPlugin = (name, callback) ->
-  return callback(window.plugins[name]) if window.plugins[name]
-  getScript "/plugins/#{name}/#{name}.js", () ->
-    # Grr... where is let when you need it!
-    p = window.plugins[name]
-    if p
-      p.bind = bind(name, p.bind)
-      return callback(p)
-    getScript "/plugins/#{name}.js", () ->
+  return loadingScripts[name].then(callback) if loadingScripts[name]
+  loadingScripts[name] = new Promise (resolve, _reject) ->
+    return resolve(window.plugins[name]) if window.plugins[name]
+    getScript "/plugins/#{name}/#{name}.js", () ->
+      # Grr... where is let when you need it!
       p = window.plugins[name]
-      p.bind = bind(name, p.bind) if p
-      callback(p)
+      if p
+        p.bind = bind(name, p.bind)
+        return resolve(p)
+      getScript "/plugins/#{name}.js", () ->
+        p = window.plugins[name]
+        p.bind = bind(name, p.bind) if p
+        return resolve(p)
+  loadingScripts[name].then (plugin) ->
+    delete loadingScripts[name]
+    return callback(plugin)
+  return loadingScripts[name]
 
 
 plugin.do = plugin.doPlugin = (div, item, done=->) ->
