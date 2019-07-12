@@ -53,7 +53,7 @@ equals = (a, b) -> a and b and a.get(0) == b.get(0)
 getStoryItemOrder = ($story) ->
   $story.children().map((_, value) -> $(value).attr('data-id')).get()
 
-handleDrop = (evt, ui, originalOrder) ->
+handleDrop = (evt, ui, originalIndex, originalOrder) ->
   $item = ui.item
 
   item = getItem($item)
@@ -74,7 +74,7 @@ handleDrop = (evt, ui, originalOrder) ->
   if moveWithinPage
     order = getStoryItemOrder($item.parents('.story:first'))
     if not _.isEqual(order, originalOrder)
-      plugin.do $item.empty(), $item.data("item")
+      plugin.do $item.empty(), $item.data("item"), (->), originalIndex
       pageHandler.put $destinationPage, {id: item.id, type: 'move', order: order}
     return
   copying = sourceIsGhost or evt.shiftKey
@@ -91,7 +91,7 @@ handleDrop = (evt, ui, originalOrder) ->
   item = aliasItem $destinationPage, $item, item
   pageHandler.put $destinationPage,
                   {id: item.id, type: 'add', item, after: before?.id}
-  plugin.do $item.empty(), item
+  plugin.do $item.empty(), item, (->), originalIndex
 
 changeMouseCursor = (e, ui) ->
   $sourcePage = ui.item.data('pageElement')
@@ -121,19 +121,22 @@ initDragging = ($page) ->
     delay: 150
   $story = $page.find('.story')
   originalOrder = null
+  originalIndex = null
   dragCancelled = null
   cancelDrag = (e) ->
     dragCancelled = true
     $story.sortable('cancel') if e.which == 27
   $story.sortable(options)
     .on 'sortstart', (e, ui) ->
+      $item = ui.item
       originalOrder = getStoryItemOrder($story)
+      originalIndex = $('.item').index($item)
       dragCancelled = false
       $('body').on('keydown', cancelDrag)
       # Create a copy that we control since sortable removes theirs too early.
       # Insert after the placeholder to prevent adding history when item not moved.
       # Clear out the styling they add. Updates to jquery ui can affect this.
-      ui.item.clone().insertAfter(ui.placeholder).hide().addClass("shadow-copy")
+      $item.clone().insertAfter(ui.placeholder).hide().addClass("shadow-copy")
         .css(
           width: ''
           height: ''
@@ -143,7 +146,7 @@ initDragging = ($page) ->
     .on 'sort', changeMouseCursor
     .on 'sortstop', (e, ui) ->
       $('body').css('cursor', origCursor).off('keydown', cancelDrag)
-      handleDrop(e, ui, originalOrder) unless dragCancelled
+      handleDrop(e, ui, originalIndex, originalOrder) unless dragCancelled
       $('.shadow-copy').remove()
 
 getPageObject = ($journal) ->
