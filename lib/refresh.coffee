@@ -305,10 +305,29 @@ renderPageIntoPageElement = (pageObject, $page) ->
   emitHeader $header, $page, pageObject
   emitTimestamp $header, $page, pageObject
 
-  pageObject.seqItems (item, done) ->
+  console.log("??? page object", pageObject)
+  for item in pageObject.getRawPage().story
+    console.log(item)
     $item = $ """<div class="item #{item.type}" data-id="#{item.id}">"""
     $story.append $item
-    plugin.do $item, item, done
+    plugin.emit $item, item, {}
+  #pageObject.seqItems (item, done) ->
+  #  console.log(item)
+  #  $item = $ """<div class="item #{item.type}" data-id="#{item.id}">"""
+  #  $story.append $item
+  #  plugin.emit $item, item, {done}
+  console.log('page is', $page, $page.find('.item'))
+  $page.find('.item').each (_i, itemElem) ->
+    $item = $(itemElem)
+    item = $item.data('item')
+    console.log('!!!! item 1', item.type, $item, itemElem, item)
+    try
+      throw [$item, item, itemElem]
+    catch enclosed
+      [$item_, item_, itemElem_] = enclosed
+      plugin.getPlugin item_.type, (plugin) ->
+        console.log('!!!! item 2', item_.type, $item_, itemElem_, item_)
+        plugin.bind $item_, item_
 
   if $('.editEnable').is(':visible')
     pageObject.seqActions (each, done) ->

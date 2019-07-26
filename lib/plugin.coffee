@@ -45,12 +45,6 @@ pluginsThatConsume = (capability) ->
     .filter (plugin) -> window.plugins[plugin].consumes
     .filter (plugin) -> Object.keys(window.plugins[plugin].consumes).indexOf(capability) != -1
 
-# Produces is an array
-pluginsThatProduce = (capability) ->
-  Object.keys(window.plugins)
-    .filter (plugin) -> window.plugins[plugin].produces
-    .filter (plugin) -> window.plugins[plugin].produces.indexOf(capability) != -1
-
 bind = (name, pluginBind) ->
   fn = ($item, item, oldIndex) ->
     index = $('.item').index($item)
@@ -63,14 +57,13 @@ bind = (name, pluginBind) ->
     if consumes
       consumes = Object.keys(consumes)[0]
       # TODO: Support consuming more than one capability
-      producers = pluginsThatProduce(consumes)
+      producers = $(".item:lt(#{index})").filter(consumes)
       console.log(name, "consumes", consumes)
       console.log(producers, "produce", consumes)
       if not producers or producers.length == 0
-        console.log 'warn: no plugin registered that produces', consumes
-      instances = $(".item:lt(#{index})").filter(consumes)
-      console.log("there are #{instances.length} instances of #{consumes}")
-      deps = instances.map (_i, el) -> el.promise
+        console.log 'warn: no items in lineup that produces', consumes
+      console.log("there are #{producers.length} instances of #{consumes}")
+      deps = producers.map (_i, el) -> el.promise
       waitFor = Promise.all(deps)
     waitFor
       .then pluginBind($item, item)
@@ -102,10 +95,12 @@ plugin.get = plugin.getPlugin = (name, callback) ->
       p = window.plugins[name]
       if p
         p.bind = bind(name, p.bind)
+        p.bind.plugin_name = name
         return resolve(p)
       getScript "/plugins/#{name}.js", () ->
         p = window.plugins[name]
         p.bind = bind(name, p.bind) if p
+        p.bind.plugin_name = name
         return resolve(p)
   loadingScripts[name].then (plugin) ->
     delete loadingScripts[name]
@@ -114,6 +109,9 @@ plugin.get = plugin.getPlugin = (name, callback) ->
 
 
 plugin.do = plugin.doPlugin = (div, item, done=->, originalIndex) ->
+  plugin.emit div, item, {done, originalIndex, bind: true}
+
+plugin.emit = (div, item, {done=->, originalIndex, bind=false}) ->
   error = (ex, script) ->
     div.append """
       <div class="error">
@@ -146,11 +144,11 @@ plugin.do = plugin.doPlugin = (div, item, done=->, originalIndex) ->
       $('.retry').on 'click', ->
         if script.emit.length > 2
           script.emit div, item, ->
-            script.bind div, item, originalIndex
+            script.bind div, item, originalIndex if bind
             done()
         else
           script.emit div, item
-          script.bind div, item, originalIndex
+          script.bind div, item, originalIndex if bind
           done()
 
   div.data 'pageElement', div.parents(".page")
@@ -160,11 +158,11 @@ plugin.do = plugin.doPlugin = (div, item, done=->, originalIndex) ->
       throw TypeError("Can't find plugin for '#{item.type}'") unless script?
       if script.emit.length > 2
         script.emit div, item, ->
-          script.bind div, item, originalIndex
+          script.bind div, item, originalIndex if bind
           done()
       else
         script.emit div, item
-        script.bind div, item, originalIndex
+        script.bind div, item, originalIndex if bind
         done()
     catch err
       console.log 'plugin error', err
