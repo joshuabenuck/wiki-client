@@ -27,7 +27,6 @@ scripts = []
 loadingScripts = {}
 getScript = plugin.getScript = (url, callback = () ->) ->
   console.log(url)
-  # console.log "URL :", url, "\nCallback :", callback
   if url in scripts
     callback()
   else
@@ -55,33 +54,33 @@ bind = (name, pluginBind) ->
     # Wait for all items in the lineup that produce what we consume
     # before calling our bind method.
     if consumes
-      consumes = Object.keys(consumes)[0]
-      # TODO: Support consuming more than one capability
-      producers = $(".item:lt(#{index})").filter(consumes)
-      console.log(name, "consumes", consumes)
-      console.log(producers, "produce", consumes)
-      if not producers or producers.length == 0
-        console.log 'warn: no items in lineup that produces', consumes
-      console.log("there are #{producers.length} instances of #{consumes}")
-      deps = producers.map (_i, el) -> el.promise
+      deps = []
+      Object.keys(consumes).forEach (consuming) ->
+        producers = $(".item:lt(#{index})").filter(consuming)
+        console.log(name, "consumes", consuming)
+        console.log(producers, "produce", consuming)
+        if not producers or producers.length == 0
+          console.log 'warn: no items in lineup that produces', consuming
+        console.log("there are #{producers.length} instances of #{consuming}")
+        deps.concat(producers.map (_i, el) -> el.promise)
       waitFor = Promise.all(deps)
     waitFor
       .then pluginBind($item, item)
       # After we bind, notify everyone that depends on us to reload
       .then ->
-        p = window.plugins[name]
-        return if not p.produces
-        console.log 'notifying plugins that consume', p.produces
-        tonotify = pluginsThatConsume(p.produces[0])
-        console.log(p.produces[0], "we need to notify", tonotify, "of changes")
-        tonotify.forEach (name) ->
-          instances = $(".item:gt(#{notifIndex-1})").filter("." + name)
-          console.log("there are #{instances.length} instances of #{name} beyond index #{notifIndex-1}")
-          instances.each (_i, consumer) ->
-            $consumer = $(consumer)
-            console.log(consumer, $consumer)
-            plugin.do $consumer.empty(), $consumer.data("item")
-            console.log($consumer[0])
+        produces = $item[0].className.split(" ")
+          .filter (c) -> c.indexOf("-source") != -1
+          .map (c) -> "." + c
+        return if produces.length == 0
+        produces.forEach (producer) ->
+          tonotify = pluginsThatConsume(producer)
+          console.log(producer, "is consumed by", tonotify)
+          tonotify.forEach (name) ->
+            instances = $(".item:gt(#{notifIndex-1})").filter("." + name)
+            console.log("there are #{instances.length} instances of #{name} beyond index #{notifIndex-1}")
+            instances.each (_i, consumer) ->
+              $consumer = $(consumer)
+              plugin.do $consumer.empty(), $consumer.data("item")
       .catch (e) ->
         console.log 'plugin emit: unexpected error', e
   return fn
@@ -91,7 +90,6 @@ plugin.get = plugin.getPlugin = (name, callback) ->
   loadingScripts[name] = new Promise (resolve, _reject) ->
     return resolve(window.plugins[name]) if window.plugins[name]
     getScript "/plugins/#{name}/#{name}.js", () ->
-      # Grr... where is let when you need it!
       p = window.plugins[name]
       if p
         p.bind = bind(name, p.bind)
